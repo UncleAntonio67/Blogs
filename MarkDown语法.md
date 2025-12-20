@@ -13,6 +13,8 @@
 > [!WARNING]
 > Dangerous certain consequences of an action.
 
+> [!Question]
+> Optional information to help a user be more successful.
 
 > This is a blockquote. It is usually rendered indented and with a different background color.
 
