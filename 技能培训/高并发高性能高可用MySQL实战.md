@@ -9,3 +9,11 @@
 - 切换：提高可用性、主从切换、并发提升、丢失切换时的数据
 
 # 二. 环境搭建
+
+- 搭建CentOS虚拟机
+- 下载Mysql并解压
+```shell
+wget https://downloads.mysql.com/archives/get/p/23/file/mysql-5.7.33-1.el7.x86_64.rpm-bundle.tar
+
+
+```
