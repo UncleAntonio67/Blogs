@@ -833,3 +833,89 @@ hadoop jar /export/data/db_hadoop-1.0-SNAPSHOT.jar com.imooc.mr.WordCountJob -Dm
 - 开始相关操作，Namenode端口号是8020
 
 # 二.Flume从0到高手一站式养成记
+
+## 1.极速入门Flume
+
+### 核心知识
+
+Flume是一个高可用、高可靠，分布式的海量日志采集、聚合和传输的系统，不需要写一行代码
+
+![[file-20260119214234144.png | 600]]
+
+1. 它有一个简单、灵活的基于流的数据流结构
+2. 具有负载均衡机制和故障转移机制
+3. 一个简单可扩展的数据模型
+
+高级应用场景：
+- 多个agent之间可以联通
+
+![[file-20260119214816324.png | 600]]
+
+- 多个agent汇聚
+![[file-20260119214924876.png]]
+
+**三个核心组件**：
+
+| **组件名称**    | **核心作用 (Role)**                                             | **常见类型 (Types)**                                    | **常用场景与特点**                                                                                        |
+| ----------- | ----------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Source**  | **数据采集**：负责接收外部源的数据，并将数据封装成 Flume 事件（Event）传递给 Channel。     | Avro, Exec, Spooling Directory, Kafka, NetCat, HTTP | **Exec**: 实时监控文件输出（如 `tail -f`）。<br>**Spooling Dir**: 监控目录下新增的文件。<br>**Kafka**: 从 Kafka 消息队列中读取数据。 |
+| **Channel** | **中转存储**：位于 Source 和 Sink 之间的临时缓冲区，起到了解耦和削峰填谷的作用。           | Memory Channel, File Channel, Kafka Channel         | **Memory**: 速度极快，但断电数据会丢失。<br>**File**: 数据写在磁盘，可靠性高但速度慢。<br>**Kafka**: 利用 Kafka 集群做缓冲，安全性极高。       |
+| **Sink**    | **数据下沉**：从 Channel 中取出数据，并将其发送到目的地（如 HDFS）或下一个 Flume Agent。 | HDFS, Logger, Avro, Kafka, HBase, Solr              | **HDFS**: 最常用的目的地，存入大数据集群。<br>**Logger**: 打印到控制台，多用于调试。<br>**Avro**: 发送给另一个 Flume Agent，用于多级级联。    |
+
+下载安装及配置：https://flume.apache.org/
+
+### 实验操作
+
+解压，更改配置
+
+## 2.极速上手Flume使用
+
+### 核心知识
+
+操作手册：https://flume.apache.org/releases/content/1.11.0/FlumeUserGuide.html
+
+1.在 Flume 的 `conf` 目录下（或自定义路径），添加配置文件
+2.进入 Flume 的安装目录，执行以下命令启动服务。
+3.保留启动 Flume 的终端窗口，另外打开一个**新的终端窗口**，使用 `telnet` 连接刚才配置的端口。
+
+### 实验操作
+
+1.编辑配置文件
+```config
+# example.conf: A single-node Flume configuration
+
+# Name the components on this agent
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = localhost
+a1.sources.r1.port = 44444
+
+# Describe the sink
+a1.sinks.k1.type = logger
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+
+2.启动Agent：
+```shell
+bin/flume-ng agent --conf conf --conf-file example.conf --name a1 -Dflume.root.logger=INFO,console
+```
+
+3.启动telnet发送消息查看效果
+```shell
+telnet localhost 44444
+```
+
+![[file-20260119231710607.png | 500]]
+
