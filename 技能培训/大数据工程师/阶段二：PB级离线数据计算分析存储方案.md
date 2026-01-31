@@ -878,6 +878,10 @@ Flume是一个高可用、高可靠，分布式的海量日志采集、聚合和
 2.进入 Flume 的安装目录，执行以下命令启动服务。
 3.保留启动 Flume 的终端窗口，另外打开一个**新的终端窗口**，使用 `telnet` 连接刚才配置的端口。
 
+案例一：采集文件内容上传到HDFS
+案例二：采集网站日志上传至HDFS
+![[file-20260131150333891.png | 600]]
+
 ### 实验操作
 
 1.编辑配置文件
@@ -891,7 +895,8 @@ a1.channels = c1
 
 # Describe/configure the source
 a1.sources.r1.type = netcat
-a1.sources.r1.bind = localhost
+# a1.sources.r1.bind = localhost
+a1.sources.r1.bind = 0.0.0.0
 a1.sources.r1.port = 44444
 
 # Describe the sink
@@ -919,3 +924,323 @@ telnet localhost 44444
 
 ![[file-20260119231710607.png | 500]]
 
+4.后台运行
+```shell
+nohup bin/flume-ng agent --conf conf --conf-file example.conf &
+```
+
+5.查看日志
+```shell
+tail -10 flume.log
+```
+
+**案例1：采集文件内容上传到HDFS**
+
+1.配置文件
+```yaml
+# Name the components on this agent
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = spooldir
+a1.sources.r1.spoolDir = /data/log/StudentDir
+
+
+# Describe the sink
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/flume/StudentDir
+a1.sinks.k1.hdfs.filePrefix = stu-
+a1.sinks.k1.hdfs.fileType = DataStream 
+a1.sinks.k1.hdfs.writeFormat = Text 
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = file
+a1.channels.c1.checkpointDir = /export/servers/flume-1.11.0/StudentDir/checkpoint
+a1.channels.c1.dataDirs = /export/servers/flume-1.11.0/StudentDir/data
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+```
+
+2.在对应目录下生成测试数据
+``` shell
+# 创建目录
+mkdir -p /data/log/StudentDir
+
+# 生成测试数据
+jack 12 male
+jessic 13 female
+tom 30 male
+```
+
+3.启动hdfs后启动Agent
+```shell
+bin/flume-ng agent --conf conf --conf-file file-to-hdfs.conf --name a1 -Dflume.root.logger=INFO,console
+```
+
+4.查看hdfs文件：
+```shell
+hdfs dfs -cat /flume/StudentDir/stu-.1769841769976.tmp
+```
+![[file-20260131145814937.png]]
+
+5.查看channel
+![[file-20260131150118562.png| 500]]
+
+**案例2：采集网站内容上传到HDFS**
+
+1.在node02和node03配置安装flume
+```shell
+scp -rq flume-1.11.0/ node02:/export/servers/
+scp -rq flume-1.11.0/ node03:/export/servers/
+```
+
+node01配置：
+```conf
+# agent-avro-hdfs.conf: 运行在 Node01 (192.168.148.100)
+
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: 必须是 Avro，用来接收 Node02/03 发来的数据
+# ------------------------------------------------
+a1.sources.r1.type = avro
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 45454
+
+# ------------------------------------------------
+# 2. Sink: 这里才是真正写入 HDFS 的地方
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+# 确认你的 HDFS NameNode 地址是 9000 还是 9820/8020
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/access/%Y%m%d
+a1.sinks.k1.hdfs.filePrefix = access-
+# 解决小文件问题，积攒够了再写
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+# 关键设置：生成目录需要时间
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+# ------------------------------------------------
+# 3. Channel
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 10000
+a1.channels.c1.transactionCapacity = 1000
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+node02、node03配置：
+```conf
+#example.conf: A single-node Flume configuration
+
+# Name the components on this agent
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = exec
+a1.sources.r1.command = tail -F /data/log/access.log
+
+
+# Describe the sink
+a1.sinks.k1.type = avro
+a1.sinks.k1.hostname = 192.168.148.100
+a1.sinks.k1.port = 45454
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 10000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+
+2.创建数据目录，生成测试数据
+```shell
+#!/bin/bash
+
+# 定义日志文件路径
+LOG_DIR="/data/log"
+LOG_FILE="${LOG_DIR}/access.log"
+
+# 检查日志目录是否存在，如果不存在则创建（这是比原图优化的地方）
+if [ ! -d "$LOG_DIR" ]; then
+    mkdir -p "$LOG_DIR"
+fi
+
+# 循环向文件中生成数据
+# while true 比 while [ "1" = "1" ] 更通用
+while true
+do
+    # 获取当前时间戳
+    curr_time=$(date +%s)
+    
+    # 获取当前主机名
+    name=$(hostname)
+    
+    # 将 "主机名_时间戳" 追加写入到日志文件
+    echo "${name}_${curr_time}" >> "$LOG_FILE"
+    
+    # 暂停1秒
+    sleep 1
+done
+```
+
+3.先启动node01，再启动node02、node03
+```shell
+bin/flume-ng agent --conf conf --conf-file avro-to-hdfs-node01.conf --name a1 -Dflume.root.logger=INFO,console
+
+agent --conf conf --conf-file file-to-avro-node02.conf --name a1 -Dflume.root.logger=INFO,console
+
+agent --conf conf --conf-file file-to-avro-node03.conf --name a1 -Dflume.root.logger=INFO,console
+```
+
+4.查看效果
+![[file-20260131170108667.png | 600]]
+
+## 3.Flume高级组件
+
+### 核心知识 
+
+| **组件名称**                                | **定义**                                       | **核心作用 (通俗解释)**                                                       | **典型应用场景**                                                                                                                       |
+| --------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Source Interceptors**<br>(Source 拦截器) | Source 可以指定一个或者多个拦截器，**按先后顺序**依次对采集到的数据进行处理。 | **“流水线加工”**<br>在数据进入 Channel 之前，像过安检一样，对数据进行过滤、修改或打标签。支持链式处理（A处理完给B）。 | 1. **ETL 清洗**：过滤掉不符合 JSON 格式的脏数据。<br>2. **脱敏**：将身份证号中间几位替换为 `*`。<br>3. **打标签**：给数据加上 `timestamp` 或 `host` 头信息。                   |
+| **Channel Selectors**<br>(Channel 选择器)  | Source 发往**多个 Channel** 的策略设置。               | **“数据分发员”**<br>决定数据是“复制”给所有下游，还是根据条件“分流”给特定下游。                        | 1. **Replicating (复制)**：一份日志存 HDFS 做离线分析，一份发 Kafka 做实时计算。<br>2. **Multiplexing (多路复用)**：按地区分流，美国的日志走 Channel A，中国的日志走 Channel B。 |
+| **Sink Processors**<br>(Sink 处理器)       | **Sink 发送数据的策略设置**。                          | **“发送策略组”**<br>通常用于将多个 Sink 编成一个组（Sink Group），实现**负载均衡**或**故障转移**。    | 1. **Failover (故障转移)**：首选 Sink 挂了（如网络断了），自动切换到备用 Sink 发送。<br>2. **Load Balancing (负载均衡)**：把数据轮询发给多个 Sink，分摊压力，提高吞吐量。             |
+Event 是 Flume 传输数据的**基本单位**，也是事务的基本单位。在文本文件中，通常**一行记录就是一个 Event**。
+Event 里有 **header** 和 **body**；header 类型为 `Map<String, String>`。
+我们可以在 Source 中增加 header 的 `<key, value>`，在 Channel 和 Sink 中使用 header 中的值。
+
+Event 的结构示意图：
+```json
+Event = {
+    // Header: 只有 Flume 组件看，用于路由、分类、重命名
+    "headers": {
+        "timestamp": "1678888888000",  // 拦截器加的时间戳
+        "host": "web-server-01",       // 采集机器的主机名
+        "log_type": "access_log"       // 自定义的标签
+    },
+
+    // Body: 真正要保存的数据
+    "body": "2024-01-31 18:00:00 GET /index.html 200 OK"
+}
+```
+
+| **拦截器名称**              | **修改的位置**        | **核心功能** | **典型场景**              |
+| ---------------------- | ---------------- | -------- | --------------------- |
+| **Timestamp**          | Header           | 加时间戳     | 配合 HDFS Sink 生成时间目录   |
+| **Host**               | Header           | 加机器名     | 区分数据来源机器              |
+| **Static**             | Header           | 加固定标签    | 标记数据类型 (如 web vs app) |
+| **Search and Replace** | **Body**         | 修改内容     | 敏感数据脱敏、清洗垃圾字符         |
+| **Regex Extractor**    | Header (来源自Body) | 提取内容变标签  | 提取状态码(404/500)用于分流报警  |
+### 实验操作
+
+**多类型上传到hdfs**：
+hdfs://192.168.148.100: 9000/moreType/20200101/videoInfo
+hdfs://192.168.148.100:9000/moreType/20200101/userInfo
+hdfs://192.168.148.100: 9000/moreType/20200101/giftRecord
+
+Exec Source ->Search and Replace Interceptor -> Regex Extractor Interceptor -> File Channel ->HDFS Sink
+
+1.创建配置文件
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source
+# ------------------------------------------------
+a1.sources.r1.type = exec
+a1.sources.r1.command = tail -F /data/log/moreType.log
+
+# ------------------------------------------------
+# Interceptors: 核心修复区 (注意双反斜杠)
+# ------------------------------------------------
+a1.sources.r1.interceptors = i1 i2 i3 i4
+
+# --- i1: video_info ---
+a1.sources.r1.interceptors.i1.type = search_replace
+# [修复] 使用 \\s* 才能正确匹配空格
+a1.sources.r1.interceptors.i1.searchPattern = "type":\\s*"video_info"
+a1.sources.r1.interceptors.i1.replaceString = "type":"videoInfo"
+
+# --- i2: user_info ---
+a1.sources.r1.interceptors.i2.type = search_replace
+a1.sources.r1.interceptors.i2.searchPattern = "type":\\s*"user_info"
+a1.sources.r1.interceptors.i2.replaceString = "type":"userInfo"
+
+# --- i3: gift_record ---
+a1.sources.r1.interceptors.i3.type = search_replace
+a1.sources.r1.interceptors.i3.searchPattern = "type":\\s*"gift_record"
+a1.sources.r1.interceptors.i3.replaceString = "type":"giftInfo"
+
+# --- i4: 提取 logType ---
+a1.sources.r1.interceptors.i4.type = regex_extractor
+# [关键修复] 必须用 \\s 和 \\w，否则正则无效！
+a1.sources.r1.interceptors.i4.regex = "type":\\s*"(\\w+)"
+a1.sources.r1.interceptors.i4.serializers = s1
+a1.sources.r1.interceptors.i4.serializers.s1.name = logType
+
+# ------------------------------------------------
+# 2. Sink
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+# 只有 regex 匹配成功，这里的 logType 才有值
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/moreType/%Y%m%d/%{logType}
+
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k1.hdfs.filePrefix = data
+a1.sinks.k1.hdfs.fileSuffix = .log
+
+# ------------------------------------------------
+# 3. Channel
+# ------------------------------------------------
+a1.channels.c1.type = file
+a1.channels.c1.checkpointDir = /export/servers/flume-1.11.0/data/moreType/checkpoint
+a1.channels.c1.dataDirs = /mnt/flume/data
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+
+```
+
+2.生成测试数据
+```bash
+echo '{"id":"1","type":"video_info"}' >> /data/log/moreType.log
+echo '{"uid":"2","type":"user_info"}' >> /data/log/moreType.log
+echo '{"id":"3","type":"gift_record"}' >> /data/log/moreType.log
+```
+
+3.启动agent，查看效果
+```bash
+bin/flume-ng agent --conf conf --conf-file file-to-hdfs-moreType.conf --name a1 -Dflume.root.logger=INFO,console
+```
+![[file-20260131193959227.png]]
