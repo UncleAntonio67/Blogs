@@ -1151,9 +1151,15 @@ Event = {
 | **Static**             | Header           | 加固定标签    | 标记数据类型 (如 web vs app) |
 | **Search and Replace** | **Body**         | 修改内容     | 敏感数据脱敏、清洗垃圾字符         |
 | **Regex Extractor**    | Header (来源自Body) | 提取内容变标签  | 提取状态码(404/500)用于分流报警  |
+Source Interceptors案例1：多类型上传到hdfs
+Channel Selectors案例2：多channel之Replicating Channel Selector
+![[file-20260202231255635.png | 600]]
+Channel Selectors案例3：多channel之Multiplexing Channel Selector
+![[file-20260202232551517.png]]
+
 ### 实验操作
 
-**多类型上传到hdfs**：
+**案例一：多类型上传到hdfs**：
 hdfs://192.168.148.100: 9000/moreType/20200101/videoInfo
 hdfs://192.168.148.100:9000/moreType/20200101/userInfo
 hdfs://192.168.148.100: 9000/moreType/20200101/giftRecord
@@ -1244,3 +1250,70 @@ echo '{"id":"3","type":"gift_record"}' >> /data/log/moreType.log
 bin/flume-ng agent --conf conf --conf-file file-to-hdfs-moreType.conf --name a1 -Dflume.root.logger=INFO,console
 ```
 ![[file-20260131193959227.png]]
+
+
+**案例二：多channel之Replicating Channel Selector**：
+
+1.创建配置文件
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1 k2
+a1.channels = c1 c2
+
+# ------------------------------------------------
+# 1. Source
+# ------------------------------------------------
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 44444
+
+#默认是replicating
+a1.sources.r1.selector.type = replicating
+
+# ------------------------------------------------
+# 2. Sink
+# ------------------------------------------------
+a1.sinks.k1.type = logger
+
+
+a1.sinks.k2.type = hdfs
+# 只有 regex 匹配成功，这里的 logType 才有值
+a1.sinks.k2.hdfs.path = hdfs://192.168.148.100:9000/replication
+
+a1.sinks.k2.hdfs.rollInterval = 3600
+a1.sinks.k2.hdfs.rollSize = 134217728
+a1.sinks.k2.hdfs.rollCount = 0
+
+a1.sinks.k2.hdfs.fileType = DataStream
+a1.sinks.k2.hdfs.writeFormat = Text
+a1.sinks.k2.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k2.hdfs.filePrefix = data
+a1.sinks.k2.hdfs.fileSuffix = .log
+
+# ------------------------------------------------
+# 3. Channel
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+a1.channels.c2.type = memory
+a1.channels.c2.capacity = 1000
+a1.channels.c2.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1 c2
+a1.sinks.k1.channel = c1
+a1.sinks.k2.channel = c2
+```
+
+2.启动agent，查看效果
+```bash
+bin/flume-ng agent --conf conf --conf-file tcp-to-replicating.conf --name a1 -Dflume.root.logger=INFO,console
+```
+![[file-20260202232317965.png]]
+![[file-20260202234337791.png]]
+**案例三：多channel之Multiplexing Channel Selector**：
+
