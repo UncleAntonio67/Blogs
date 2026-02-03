@@ -1151,11 +1151,18 @@ Event = {
 | **Static**             | Header           | 加固定标签    | 标记数据类型 (如 web vs app) |
 | **Search and Replace** | **Body**         | 修改内容     | 敏感数据脱敏、清洗垃圾字符         |
 | **Regex Extractor**    | Header (来源自Body) | 提取内容变标签  | 提取状态码(404/500)用于分流报警  |
-Source Interceptors案例1：多类型上传到hdfs
-Channel Selectors案例2：多channel之Replicating Channel Selector
+**案例1：Source Interceptors：多类型上传到hdfs**
+**案例2：Channel Selectors：多channel之Replicating Channel Selector**
 ![[file-20260202231255635.png | 600]]
-Channel Selectors案例3：多channel之Multiplexing Channel Selector
+
+**案例三：多channel之Multiplexing Channel Selector**：
 ![[file-20260202232551517.png]]
+**案例4：Load balancing Sink Processor**
+![[file-20260203211015687.png]]
+
+**案例5：Failover Sink Processor**
+
+![[file-20260203222058872.png]]
 
 ### 实验操作
 
@@ -1315,5 +1322,449 @@ bin/flume-ng agent --conf conf --conf-file tcp-to-replicating.conf --name a1 -Df
 ```
 ![[file-20260202232317965.png]]
 ![[file-20260202234337791.png]]
+
+
 **案例三：多channel之Multiplexing Channel Selector**：
 
+1.创建配置文件
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1 k2
+a1.channels = c1 c2
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 44444
+
+# --- Interceptor: 正则提取 city ---
+# [修复] al -> a1
+a1.sources.r1.interceptors = i1
+# [修复] al -> a1, regex extractor -> regex_extractor
+a1.sources.r1.interceptors.i1.type = regex_extractor
+# [优化] 加上 \\s* 允许冒号后有空格，增强兼容性
+a1.sources.r1.interceptors.i1.regex = "city":\\s*"(\\w+)"
+a1.sources.r1.interceptors.i1.serializers = s1
+a1.sources.r1.interceptors.i1.serializers.s1.name = city
+
+# --- Selector: Multiplexing (分流) ---
+# [修复] al -> a1
+a1.sources.r1.selector.type = multiplexing
+a1.sources.r1.selector.header = city
+# 逻辑：如果是 bj -> 走 c1 (Logger 打印到屏幕)
+a1.sources.r1.selector.mapping.bj = c1
+# 逻辑：其他城市 -> 走 c2 (存入 HDFS)
+a1.sources.r1.selector.default = c2
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+# Sink k1: Logger (控制台输出)
+a1.sinks.k1.type = logger
+
+# Sink k2: HDFS (存文件)
+a1.sinks.k2.type = hdfs
+a1.sinks.k2.hdfs.path = hdfs://192.168.148.100:9000/multiplexing
+# 只有 path 里有时间占位符(%Y%m%d)时，useLocalTimeStamp 才是必须的
+# 但开着也没坏处
+a1.sinks.k2.hdfs.useLocalTimeStamp = true
+
+# 滚动策略
+a1.sinks.k2.hdfs.rollInterval = 3600
+a1.sinks.k2.hdfs.rollSize = 134217728
+a1.sinks.k2.hdfs.rollCount = 0
+
+a1.sinks.k2.hdfs.fileType = DataStream
+a1.sinks.k2.hdfs.writeFormat = Text
+a1.sinks.k2.hdfs.filePrefix = data
+a1.sinks.k2.hdfs.fileSuffix = .log
+
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+a1.channels.c2.type = memory
+a1.channels.c2.capacity = 1000
+a1.channels.c2.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1 c2
+a1.sinks.k1.channel = c1
+a1.sinks.k2.channel = c2
+```
+
+2.准备测试数据
+```json
+{"name":"jack","age":19,"city":"bj"}
+{"name":"tom","age":25,"city":"sh"}
+{"name":"lucy","age":22,"city":"gz"}
+{"name":"mike","age":30,"city":"sz"}
+{"name":"alice","age":18,"city":"bj"}
+{"name":"bob","age":45,"city":"sh"}
+{"name":"john","age":33,"city":"gz"}
+```
+
+3.启动并查看配置
+```bash
+bin/flume-ng agent --conf conf --conf-file tcp-to-multiplexing.conf --name a1 -Dflume.root.logger=INFO,console
+```
+![[file-20260203210720026.png | 300]]
+![[file-20260203210638650.png]]
+
+
+
+**案例4：多channel之Multiplexing Channel Selector**：
+
+1.创建配置文件
+node01：
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = avro
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 41414
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/loadbalance
+
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k1.hdfs.filePrefix = data110
+a1.sinks.k1.hdfs.fileSuffix = .log
+
+
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+node02：
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = avro
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 41414
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/loadbalance
+
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k1.hdfs.filePrefix = data110
+a1.sinks.k1.hdfs.fileSuffix = .log
+
+
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+
+node03：
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = avro
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 41414
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/loadbalance
+
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k1.hdfs.filePrefix = data120
+a1.sinks.k1.hdfs.fileSuffix = .log
+
+
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+
+2.启动并查看效果，先启动02、03，再启动01
+![[file-20260203222000932.png | 300]]
+![[file-20260203221944656.png]]
+
+**案例5：多channel之Multiplexing Channel Selector**：
+
+1.创建配置文件
+node01:
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1 k2
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 44444
+
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+a1.sinks.k1.type = avro
+a1.sinks.k1.hostname = 192.168.148.110
+a1.sinks.k1.port = 41414
+a1.sinks.k1.batch-size = 1
+
+a1.sinks.k2.type = avro
+a1.sinks.k2.hostname = 192.168.148.120
+a1.sinks.k2.port = 41414
+a1.sinks.k2.batch-size = 1
+
+a1.sinkgroups = g1
+a1.sinkgroups.g1.sinks = k1 k2
+a1.sinkgroups.g1.processor.type = failover
+a1.sinkgroups.g1.processor.priority.k1 = 5
+a1.sinkgroups.g1.processor.priority.k2 = 10
+a1.sinkgroups.g1.processor.maxpenalty = 10000
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+a1.sinks.k2.channel = c1
+```
+node02:
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = avro
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 41414
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/failover
+
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k1.hdfs.filePrefix = data110
+a1.sinks.k1.hdfs.fileSuffix = .log
+
+
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+node02:
+```conf
+# Name the components
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# ------------------------------------------------
+# 1. Source: Netcat (监听端口)
+# ------------------------------------------------
+a1.sources.r1.type = avro
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 41414
+
+# ------------------------------------------------
+# 2. Sinks
+# ------------------------------------------------
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = hdfs://192.168.148.100:9000/failover
+
+a1.sinks.k1.hdfs.rollInterval = 3600
+a1.sinks.k1.hdfs.rollSize = 134217728
+a1.sinks.k1.hdfs.rollCount = 0
+
+a1.sinks.k1.hdfs.fileType = DataStream
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.useLocalTimeStamp = true
+
+a1.sinks.k1.hdfs.filePrefix = data120
+a1.sinks.k1.hdfs.fileSuffix = .log
+
+
+# ------------------------------------------------
+# 3. Channels
+# ------------------------------------------------
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+
+2.启动并查看效果，先启动02、03，再启动01
+![[file-20260203223245588.png | 300]]
+![[file-20260203223307360.png]]
+
+
+## 4.Flume出神入化
+
+### 核心知识
+
+![[file-20260203223445644.png | 500]]
+**flume自定义组件**可参考官方开发文档
+
+**Flume优化**：
+
+| **优化项**       | **核心建议 (图片原文)**                  | **适用场景 / 解决的问题**                                                                                              | **具体操作方式**                                  | **配置/命令示例**                                                                                                                  |
+| ------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **1. 调整内存大小** | 建议设置 **1G~2G**，太小的话会导致频繁 GC。     | **场景：** 高吞吐量、使用 Memory Channel、或者日志量非常大时。<br>**解决：** 防止 JVM 频繁进行垃圾回收导致传输卡顿，或直接报 OOM (内存溢出) 崩溃。                | 修改 `conf/flume-env.sh` 文件中的 `JAVA_OPTS` 参数。 | **修改内容：**<br>`export JAVA_OPTS="-Xms2048m -Xmx2048m -Dcom.sun.management.jmxremote"`<br>_(建议 Xms 和 Xmx 设为一样大)_               |
+| **2. 区分日志文件** | 启动**多个 Flume 进程**时，建议修改配置区分日志文件。 | **场景：** 单台服务器上运行了多个 Agent (如一个采 Web 日志，一个采 App 日志)。<br>**解决：** 防止所有进程把日志写到同一个 `flume.log` 里，导致日志错乱、覆盖，无法排查问题。 | 在**启动命令**中添加 `-D` 参数动态指定日志文件名。              | **启动命令追加参数：**<br>`bin/flume-ng agent ...`<br><br>`-Dflume.log.file=my-app-log.log`<br><br>`-Dflume.root.logger=INFO,LOGFILE` |
+**Flume进程监控**：
+通过shell脚本实现Flume进程监控及自动重启
+
+### 实验操作
+
+1.编写相关脚本：
+monlist.conf
+```bash
+example=startExample.sh
+```
+startExample.sh
+```bash
+#!/bin/bash
+
+# [注意] 请修改为你实际的 Flume 安装路径
+flume_path=/data/soft/apache-flume-1.9.0-bin
+
+# 启动命令
+nohup ${flume_path}/bin/flume-ng agent --name a1 --conf ${flume_path}/conf/ --conf-file ${flume_path}/conf/example.conf &
+```
+monlist.sh
+```bash
+#!/bin/bash
+
+monlist=`cat monlist.conf`
+echo "start check"
+for item in ${monlist}
+do
+    # 1. 设置字段分隔符为等号 (=)
+    OLD_IFS=$IFS
+    IFS="="
+    # 2. 把一行内容转成数组 (例如 example=startExample.sh)
+    arr=($item)
+    # 3. 获取等号左边的内容 (关键词，用于 grep)
+    name=${arr[0]}
+    # 4. 获取等号右边的内容 (重启脚本)
+    script=${arr[1]}
+    # 恢复默认分隔符 (非常重要，否则下一次循环会出错)
+    IFS=$OLD_IFS
+    echo "time is:" `date +"%Y-%m-%d %H:%M:%S"` " check "$name
+    # 5. 核心判断：利用 jps -m 查看进程，过滤关键词，统计行数
+    # 如果行数为 0，说明进程挂了
+    if [ `jps -m | grep $name | wc -l` -eq 0 ]
+    then
+        # 发短信或者邮件告警 (这里仅打印日志)
+        echo `date +"%Y-%m-%d %H:%M:%S"` $name "is none"   
+        # 6. 执行重启脚本 (-x 显示执行过程)
+        sh -x ./$script
+    fi
+done
+```
+
+2.执行验证效果：
+![[file-20260203231134619.png | 300]]
+![[file-20260203231113632.png]]
+
+# 三.数据仓库Hive从入门到小牛
