@@ -1801,6 +1801,8 @@ Hive是建立在Hadoop上的数据仓库的基础架构，提供了一系统工�
 |               |                                                                          |                                                                                                                           |                                                                                                                                                                                      |
 ## 2.数据库与数据仓库
 
+### 核心知识
+
 |**对比项**|**HIVE**|**MySQL**|
 |---|---|---|
 |**数据存储位置**|HDFS|本地磁盘|
@@ -1824,5 +1826,70 @@ Hive是建立在Hadoop上的数据仓库的基础架构，提供了一系统工�
 |**响应速度**|**毫秒级**。要求实时响应，不能让用户等。|**秒级/分钟/小时级**。容忍度较高，因为处理的数据量巨大。|
 |**并发用户**|**成千上万**。所有的终端用户、App、网页都在连接。|**几十/几百人**。主要是数据分析师、高管、报表系统。|
 |**底层引擎**|针对行存储优化 (Row-oriented)，方便查单条记录。|通常针对列存储优化 (Column-oriented)，方便做聚合统计 (Sum, Avg)。|
-Hive安装部署：
-![[file-20260205234409401.png]]
+
+### 实验操作
+
+1.修改配置文件hive-site.xml 、core-site.xml
+```xml
+<configuration>
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:mysql://mysqlIp:3306/hive?serverTimezone=Asia/Shanghai</value>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>com.mysql.cj.jdbc.Driver</value>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>root</value>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>你的密码</value>
+    </property>
+        <property>
+        <name>hive.querylog.location</name>
+        <value>/data/hive_repo/querylog</value>
+    </property>
+    <property>
+        <name>hive.exec.local.scratchdir</name>
+        <value>/data/hive_repo/scratchdir</value>
+    </property>
+
+    <property>
+        <name>hive.downloaded.resources.dir</name>
+        <value>/data/hive_repo/resources</value>
+    </property>
+</configuration>
+```
+
+```xml
+<property>
+    <name>hadoop.proxyuser.root.hosts</name>
+    <value>*</value>
+</property>
+<property>
+    <name>hadoop.proxyuser.root.groups</name>
+    <value>*</value>
+</property>
+```
+
+2.创建数据库用户并授权
+```sql
+-- 1. 创建用户（如果不存在）
+CREATE USER 'root'@'%' IDENTIFIED BY '111111';
+
+-- 2. 授权
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+```
+
+3.上传mysql driver到lib目录下，进行初始化
+```bash
+bin/schematool -dbType mysql -initSchema -verbose
+```
+![[file-20260205234409401.png | 300]]
