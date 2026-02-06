@@ -1864,6 +1864,13 @@ Hive是建立在Hadoop上的数据仓库的基础架构，提供了一系统工�
         <name>hive.downloaded.resources.dir</name>
         <value>/data/hive_repo/resources</value>
     </property>
+    <property>
+        <name>hive.txn.xlock.iow</name>
+        <value>true</value>
+        <description>
+          are not hidden by the INSERT OVERWRITE.
+        </description>
+    </property>
 </configuration>
 ```
 
@@ -1893,3 +1900,53 @@ FLUSH PRIVILEGES;
 bin/schematool -dbType mysql -initSchema -verbose
 ```
 ![[file-20260205234409401.png | 300]]
+
+## 3.Hive基础使用
+
+### 核心知识
+
+| **对比维度**  | **1. Hive CLI (第一代)**                                    | **2. Beeline + HiveServer2 (第二代/推荐)**                                     |
+| --------- | -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **启动命令**  | `bin/hive`                                               | `bin/beeline` (连接 JDBC)                                                   |
+| **架构模式**  | **胖客户端 (Thick Client)**<br>SQL 解析、编译、优化都在**当前客户端进程**中完成。 | **客户端-服务端 (C/S)**<br>Beeline 只是个轻量级客户端，所有计算逻辑在服务端的 **HiveServer2** 进程中完成。 |
+| **系统稳定性** | **低**<br>如果客户端（你的终端）关闭或崩溃，任务往往会中断。                       | **高**<br>客户端断开不影响服务端运行，服务端负责提交和管理任务。                                      |
+| **安全性**   | **弱**<br>直接跳过身份验证，使用操作系统的当前用户，容易绕过权限。                    | **强**<br>支持 JDBC 规范，支持 Kerberos、LDAP、用户名/密码认证，权限控制更严密。                    |
+| **并发支持**  | **差**<br>每个客户端都要启动一个 JVM 实例，资源消耗大，不适合多人同时用。              | **好**<br>HiveServer2 是一个守护进程，支持多客户端并发连接，资源利用率高。                           |
+| **官方状态**  | **❌ 已废弃 (Deprecated)**<br>Hive 2.0 以后已不再推荐，未来版本可能会移除。    | **✅ 官方推荐 (Standard)**<br>生产环境的标准使用方式。                                     |
+| **适用场景**  | **仅限个人测试**<br>管理员快速调试、查看本地日志、初始化配置时使用。                   | **生产环境/团队开发**<br>数据分析师查询、BI 工具连接 (Tableau, FineBI)、Java/Python 代码调用。      |
+
+### 实验操作
+
+1.启动hive
+```bash
+#方式一
+bin/hive
+#方式二
+nohup hive --service metastore >> /export/servers/hive/logs/metastore.log 2>&1 &
+nohup hive --service hiveserver2 >> /export/servers/hive/logs/hiveserver2.log 2>&1 &
+bin/beeline -u jdbc:hive2://node01:10000 -n root
+```
+![[file-20260206231335918.png]]
+
+2.操作hive
+```sql
+
+CREATE EXTERNAL TABLE IF NOT EXISTS student_ext (
+    id INT,
+    name STRING
+)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+LOCATION '/user/hive/warehouse/student_ext'; -- 指定 HDFS 路径
+
+INSERT INTO TABLE student VALUES (1, 'Alice', 20, 'Math'), (2, 'Bob', 22, 'CS');
+
+DROP TABLE IF EXISTS student;
+
+```
+
+3.添加到环境变量/etc/profile
+```bash
+# HIVE_HOME 
+export HIVE_HOME=/export/servers/hive-3.1.0 
+export PATH=$PATH:$HIVE_HOME/bin
+```
