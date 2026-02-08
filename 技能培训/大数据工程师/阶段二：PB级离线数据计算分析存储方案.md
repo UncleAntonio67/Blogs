@@ -1803,29 +1803,29 @@ Hive是建立在Hadoop上的数据仓库的基础架构，提供了一系统工�
 
 ### 核心知识
 
-|**对比项**|**HIVE**|**MySQL**|
-|---|---|---|
-|**数据存储位置**|HDFS|本地磁盘|
-|**数据格式**|用户定义|系统决定|
-|**数据更新**|不支持|支持|
-|**索引**|有，但较弱|有|
-|**执行**|MapReduce|Executor|
-|**执行延迟**|高|低|
-|**可扩展性**|高|低|
-|**数据规模**|大 _(正常情况下)_|小|
+| **对比项**    | **HIVE**    | **MySQL** |
+| ---------- | ----------- | --------- |
+| **数据存储位置** | HDFS        | 本地磁盘      |
+| **数据格式**   | 用户定义        | 系统决定      |
+| **数据更新**   | 不支持         | 支持        |
+| **索引**     | 有，但较弱       | 有         |
+| **执行**     | MapReduce   | Executor  |
+| **执行延迟**   | 高           | 低         |
+| **可扩展性**   | 高           | 低         |
+| **数据规模**   | 大 _(正常情况下)_ | 小         |
 
-|**对比维度**|**数据库 (Database)**|**数据仓库 (Data Warehouse)**|
-|---|---|---|
-|**核心简称**|**OLTP** (联机事务处理)|**OLAP** (联机分析处理)|
-|**主要目标**|处理日常业务操作，保证数据录入的准确和快速。|处理数据分析，支持管理决策，挖掘历史趋势。|
-|**典型代表**|MySQL, PostgreSQL, Oracle, SQL Server|**Hive**, Teradata, Snowflake, Redshift, ClickHouse|
-|**数据时效性**|**当前值** (Current)。只保留最新状态，旧数据通常会被覆盖或归档。|**历史数据** (Historical)。存储过去 5-10 年的数据快照，不轻易删除。|
-|**数据模型**|**高度范式化 (3NF)**。尽量减少数据冗余，避免更新异常。|**反范式化 (维度建模)**。星型模型/雪花模型，允许冗余以换取查询速度。|
-|**操作类型**|**CRUD** (增删改查)。频繁的小数据量读写，并发高。|**只读/批量写入**。主要是复杂的 SELECT 查询，极少进行单行 UPDATE/DELETE。|
-|**数据量级**|**GB 级别**。数据量受单机磁盘限制，过大会影响业务性能。|**TB/PB 级别**。基于 HDFS 或云存储，天生支持海量存储。|
-|**响应速度**|**毫秒级**。要求实时响应，不能让用户等。|**秒级/分钟/小时级**。容忍度较高，因为处理的数据量巨大。|
-|**并发用户**|**成千上万**。所有的终端用户、App、网页都在连接。|**几十/几百人**。主要是数据分析师、高管、报表系统。|
-|**底层引擎**|针对行存储优化 (Row-oriented)，方便查单条记录。|通常针对列存储优化 (Column-oriented)，方便做聚合统计 (Sum, Avg)。|
+| **对比维度**  | **数据库 (Database)**                      | **数据仓库 (Data Warehouse)**                           |
+| --------- | --------------------------------------- | --------------------------------------------------- |
+| **核心简称**  | **OLTP** (联机事务处理)                       | **OLAP** (联机分析处理)                                   |
+| **主要目标**  | 处理日常业务操作，保证数据录入的准确和快速。                  | 处理数据分析，支持管理决策，挖掘历史趋势。                               |
+| **典型代表**  | MySQL, PostgreSQL, Oracle, SQL Server   | **Hive**, Teradata, Snowflake, Redshift, ClickHouse |
+| **数据时效性** | **当前值** (Current)。只保留最新状态，旧数据通常会被覆盖或归档。 | **历史数据** (Historical)。存储过去 5-10 年的数据快照，不轻易删除。       |
+| **数据模型**  | **高度范式化 (3NF)**。尽量减少数据冗余，避免更新异常。        | **反范式化 (维度建模)**。星型模型/雪花模型，允许冗余以换取查询速度。              |
+| **操作类型**  | **CRUD** (增删改查)。频繁的小数据量读写，并发高。          | **只读/批量写入**。主要是复杂的 SELECT 查询，极少进行单行 UPDATE/DELETE。  |
+| **数据量级**  | **GB 级别**。数据量受单机磁盘限制，过大会影响业务性能。         | **TB/PB 级别**。基于 HDFS 或云存储，天生支持海量存储。                 |
+| **响应速度**  | **毫秒级**。要求实时响应，不能让用户等。                  | **秒级/分钟/小时级**。容忍度较高，因为处理的数据量巨大。                     |
+| **并发用户**  | **成千上万**。所有的终端用户、App、网页都在连接。            | **几十/几百人**。主要是数据分析师、高管、报表系统。                        |
+| **底层引擎**  | 针对行存储优化 (Row-oriented)，方便查单条记录。         | 通常针对列存储优化 (Column-oriented)，方便做聚合统计 (Sum, Avg)。     |
 
 ### 实验操作
 
@@ -1915,7 +1915,28 @@ bin/schematool -dbType mysql -initSchema -verbose
 | **官方状态**  | **❌ 已废弃 (Deprecated)**<br>Hive 2.0 以后已不再推荐，未来版本可能会移除。    | **✅ 官方推荐 (Standard)**<br>生产环境的标准使用方式。                                     |
 | **适用场景**  | **仅限个人测试**<br>管理员快速调试、查看本地日志、初始化配置时使用。                   | **生产环境/团队开发**<br>数据分析师查询、BI 工具连接 (Tableau, FineBI)、Java/Python 代码调用。      |
 
+**案例1：CLI、JDBC操作Hive**
+
+**Set命令的使用：**
+
+|**配置级别**|**配置方法**|**生效范围**|**优先级**|
+|---|---|---|---|
+|**会话级**|在 Hive 命令行执行 `set key=value;`|仅对**当前窗口/会话**有效|**最高**|
+|**用户级**|修改当前用户家目录下的 `~/.hiverc`|对**当前机器/当前用户**的所有会话有效|中|
+|**全局级**|修改 `$HIVE_HOME/conf/hive-site.xml`|对**整个集群**所有连接有效|最低|
+**日志配置：**
+
+| **日志类别**                       | **配置物理位置**                                     | **关键参数/配置案例**                                                | **适用场景（案例）**                                           |
+| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
+| **服务器运行时日志** (Cluster Side)    | `$HIVE_HOME/conf/hive-log4j2.properties`       | `hive.log.dir=/tmp/hive/log`<br>`hive.root.logger=INFO,DRFA` | **案例**：HiveServer2 启动失败、node01 连接 MySQL 元数据库超时排查。      |
+| **客户端 JDBC 日志** (Project Side) | 项目 `src/main/resources/log4j2.xml`             | `<Root level="info">`<br>`<AppenderRef ref="Console"/>`      | **案例**：IDEA 运行 JDBC 程序卡住，需查看具体的连接握手过程。                 |
+| **任务执行日志** (Query Side)        | `hive-site.xml` 或 `set` 命令                     | `set hive.server2.logging.operation.level=VERBOSE;`          | **案例**：在 Beeline 或 JDBC 中实时查看 SQL 转化成 MapReduce 的详细进度。 |
+| **审计日志** (Audit Log)           | `$HIVE_HOME/conf/hive-audit-log4j2.properties` | `hive.audit.logger=INFO,Audit`                               | **案例**：公司安全合规检查，查看谁在什么时间删除了哪张表。                        |
 ### 实验操作
+
+**案例1：CLI、JDBC操作Hive**
+
+**CLI操作Hive**
 
 1.启动hive
 ```bash
@@ -1950,3 +1971,78 @@ DROP TABLE IF EXISTS student;
 export HIVE_HOME=/export/servers/hive-3.1.0 
 export PATH=$PATH:$HIVE_HOME/bin
 ```
+
+**JDBC操作Hive**：
+
+1.启动hiveserver2：
+![[file-20260208152647523.png]]
+
+2.编写代码：
+```xml
+<?xml version="1.0" encoding="UTF-8"?>  
+<project xmlns="http://maven.apache.org/POM/4.0.0"  
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"  
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">  
+    <modelVersion>4.0.0</modelVersion>  
+  
+    <groupId>org.example</groupId>  
+    <artifactId>db_hive</artifactId>  
+    <version>1.0-SNAPSHOT</version>  
+    <dependencies>        <!-- Source: https://mvnrepository.com/artifact/org.apache.hive/hive-jdbc -->  
+        <dependency>  
+            <groupId>org.apache.hive</groupId>  
+            <artifactId>hive-jdbc</artifactId>  
+            <version>3.0.0</version>  
+            <scope>compile</scope>  
+            <exclusions>                <exclusion>                    <groupId>org.slf4j</groupId>  
+                    <artifactId>slf4j-log4j2</artifactId>  
+                </exclusion>            </exclusions>        </dependency>        <dependency>            <groupId>org.apache.hadoop</groupId>  
+            <artifactId>hadoop-client</artifactId>  
+            <version>3.3.1</version>  
+            <scope>provided</scope> <exclusions>  
+            <exclusion>                <groupId>jdk.tools</groupId>  
+                <artifactId>jdk.tools</artifactId>  
+            </exclusion>        </exclusions>        </dependency>    </dependencies>    <properties>        <maven.compiler.source>9</maven.compiler.source>  
+        <maven.compiler.target>9</maven.compiler.target>  
+    </properties>  
+</project>
+```
+
+```java
+package com.imooc.hive;  
+  
+import java.sql.*;  
+  
+/**  
+ * JDBC操作Hive  
+ * 需要先启动hiveserver2服务  
+ */  
+public class HiveJdbcDemo {  
+  
+    public static void main(String[] args) throws SQLException {  
+        String jdbcUrl = "jdbc:hive2://192.168.148.100:10000";  
+        Connection conn = DriverManager.getConnection(jdbcUrl,"root","111111");  
+        Statement stmt = conn.createStatement();  
+  
+        String sql = "select * from student";  
+        ResultSet res = stmt.executeQuery(sql);  
+        while(res.next()){  
+            System.out.println(res.getInt("id")+"\t"+res.getString("name"));  
+        }  
+  
+  
+    }  
+}
+```
+
+3.启动并查看效果：
+![[file-20260208152814113.png | 300]]
+
+**Set操作：**
+![[file-20260208154506300.png | 400]]
+查看历史操作：
+```bash
+tail -10 ~/.hivehistory
+```
+
+## 4.Hive核心实战
